@@ -1,7 +1,7 @@
 //index.js
 const { sequelize } = require('../config/database');
-const User = require('./User')(sequelize);
-const Medicine = require('./Medicine')(sequelize);
+const User = require('./user')(sequelize);
+const Medicine = require('./medicine')(sequelize);
 const Purchase = require('./Purchase')(sequelize);
 const Payment = require('./Payment')(sequelize);
 
