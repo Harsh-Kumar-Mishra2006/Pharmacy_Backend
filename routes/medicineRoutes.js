@@ -5,34 +5,20 @@ const {
   getMedicines,
   getMedicineById,
   updateMedicine,
-  updateQuantity,
-  approveMedicine,
-  rejectMedicine,
   deleteMedicine,
-  getMedicineStats,
-  getSupplierSummary,
-  getMedicinesBySupplier
+  getMedicineStats
 } = require('../controllers/medicineController');
-const { protect, isAdmin, isSupplierOrAdmin, isResourceOwner } = require('../middlewares/authMiddleware');
-const { Medicine } = require('../models');
+const { protect, isAdmin } = require('../middlewares/authMiddleware');
 
-// Protected routes
 router.use(protect);
 
-// Supplier routes
-router.post('/', isSupplierOrAdmin, addMedicine);
-router.put('/:id', isSupplierOrAdmin, isResourceOwner(Medicine), updateMedicine);
-router.patch('/:id/quantity', isSupplierOrAdmin, isResourceOwner(Medicine), updateQuantity);
-
-// Admin only routes
-router.get('/statistics', isAdmin, getMedicineStats);
-router.get('/supplier-summary', isSupplierOrAdmin, getSupplierSummary);
-router.get('/supplier/:supplierId', isAdmin, getMedicinesBySupplier);
-router.put('/:id/approve', isAdmin, approveMedicine);
-router.put('/:id/reject', isAdmin, rejectMedicine);
+// Admin only
+router.post('/', isAdmin, addMedicine);
+router.put('/:id', isAdmin, updateMedicine);
 router.delete('/:id', isAdmin, deleteMedicine);
+router.get('/statistics', isAdmin, getMedicineStats);
 
-// All authenticated users (with proper filtering)
+// Any authenticated user (supplier can browse catalog to pick medicine to supply)
 router.get('/', getMedicines);
 router.get('/:id', getMedicineById);
 

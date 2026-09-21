@@ -5,6 +5,7 @@ const { sequelize, testConnection } = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
 const medicineRoutes = require('./routes/medicineRoutes');
 const purchaseRoutes = require('./routes/purchaseRoutes'); 
+const supplyRoutes = require('./routes/supplyRoutes');
 
 dotenv.config();
 
@@ -28,7 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/purchases', purchaseRoutes);
-
+app.use('/api/supplies', supplyRoutes);
 // Health check
 app.get('/', (req, res) => {
   res.json({

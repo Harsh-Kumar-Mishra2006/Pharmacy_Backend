@@ -7,32 +7,19 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    // Basic Information
     name: {
       type: DataTypes.STRING,
       allowNull: false,
-      validate: {
-        notEmpty: true,
-        len: [2, 200]
-      }
+      validate: { notEmpty: true, len: [2, 200] }
     },
-    generic_name: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    brand_name: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
+    generic_name: { type: DataTypes.STRING, allowNull: true },
+    brand_name: { type: DataTypes.STRING, allowNull: true },
     category: {
       type: DataTypes.STRING,
       allowNull: false,
-      validate: {
-        notEmpty: true
-      }
+      validate: { notEmpty: true }
     },
-    
-    // Medical Details
+
     medical_details: {
       type: DataTypes.JSONB,
       allowNull: true,
@@ -54,15 +41,14 @@ module.exports = (sequelize) => {
         country_of_origin: null
       }
     },
-    
-    // Other Details
+
     other_details: {
       type: DataTypes.JSONB,
       allowNull: true,
       defaultValue: {
         description: null,
         composition: [],
-        form: null, // tablet, capsule, syrup, injection, etc.
+        form: null,
         strength: null,
         pack_size: null,
         unit: null,
@@ -73,8 +59,7 @@ module.exports = (sequelize) => {
         distributor: null
       }
     },
-    
-    // Metadata
+
     metadata: {
       type: DataTypes.JSONB,
       allowNull: true,
@@ -91,121 +76,27 @@ module.exports = (sequelize) => {
         reviews_count: 0
       }
     },
-    
-    // Quantity & Stock
-    quantity: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-      validate: {
-        min: 0
-      }
-    },
-    min_quantity_alert: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 10,
-      validate: {
-        min: 0
-      }
-    },
-    max_quantity: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        min: 0
-      }
-    },
-    
-    // Pricing (Basic)
-    unit_price: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: false,
-      defaultValue: 0.00,
-      validate: {
-        min: 0
-      }
-    },
-    purchase_price: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: true,
-      validate: {
-        min: 0
-      }
-    },
-    discount_percentage: {
-      type: DataTypes.DECIMAL(5, 2),
-      allowNull: true,
-      defaultValue: 0,
-      validate: {
-        min: 0,
-        max: 100
-      }
-    },
-    
-    // Status
-    status: {
-      type: DataTypes.ENUM('pending', 'approved', 'rejected', 'inactive'),
-      allowNull: false,
-      defaultValue: 'pending'
-    },
-    is_available: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true
-    },
-    approval_notes: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    
-    // Images
+
     images: {
       type: DataTypes.ARRAY(DataTypes.STRING),
       allowNull: true,
       defaultValue: []
     },
-    
-    // Timestamps for approval
-    approved_at: {
-      type: DataTypes.DATE,
-      allowNull: true
+
+    is_available: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
     },
-    approved_by: {
-      type: DataTypes.UUID,
-      allowNull: true
-    },
-    rejected_at: {
-      type: DataTypes.DATE,
-      allowNull: true
-    },
-    rejected_by: {
-      type: DataTypes.UUID,
-      allowNull: true
-    },
-    
-    // Supplier reference
-    supplier_id: {
+
+    // Admin who created this medicine
+    created_by: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
-    },
-    
-    // Tracking
-    last_restocked_at: {
-      type: DataTypes.DATE,
-      allowNull: true
-    },
-    expiry_date: {
-      type: DataTypes.DATE,
-      allowNull: true
+      references: { model: 'users', key: 'id' }
     }
   }, {
     hooks: {
       beforeCreate: (medicine) => {
-        // Auto-generate product code if not provided
         if (!medicine.other_details?.product_code) {
           const prefix = medicine.category?.substring(0, 3).toUpperCase() || 'MED';
           const timestamp = Date.now().toString().slice(-6);
@@ -218,67 +109,16 @@ module.exports = (sequelize) => {
     }
   });
 
-  // Instance Methods
-  Medicine.prototype.isLowStock = function() {
-    return this.quantity <= this.min_quantity_alert;
+  // Static helpers
+  Medicine.findByCategory = async function (category) {
+    return await this.findAll({ where: { category, is_available: true } });
   };
 
-  Medicine.prototype.isOutOfStock = function() {
-    return this.quantity === 0;
-  };
-
-  Medicine.prototype.canBePurchased = function(quantity) {
-    return this.is_available && this.quantity >= quantity && this.status === 'approved';
-  };
-
-  // Static Methods
-  Medicine.findByCategory = async function(category) {
-    return await this.findAll({ 
-      where: { 
-        category,
-        status: 'approved'
-      } 
-    });
-  };
-
-  Medicine.findBySupplier = async function(supplierId) {
-    return await this.findAll({ 
-      where: { 
-        supplier_id: supplierId 
-      } 
-    });
-  };
-
-  // backend/models/Medicine.js
-Medicine.getLowStockItems = async function() {
-  const { Op } = require('sequelize');
-  const sequelize = this.sequelize;
-  return await this.findAll({
-    where: {
-      status: 'approved',
-      [Op.and]: sequelize.where(
-        sequelize.col('quantity'),
-        Op.lte,
-        sequelize.col('min_quantity_alert')
-      )
-    }
-  });
-};
-
-  Medicine.getOutOfStockItems = async function() {
-    return await this.findAll({
-      where: {
-        status: 'approved',
-        quantity: 0
-      }
-    });
-  };
-
-  Medicine.search = async function(searchTerm) {
+  Medicine.search = async function (searchTerm) {
     const { Op } = require('sequelize');
     return await this.findAll({
       where: {
-        status: 'approved',
+        is_available: true,
         [Op.or]: [
           { name: { [Op.iLike]: `%${searchTerm}%` } },
           { generic_name: { [Op.iLike]: `%${searchTerm}%` } },

@@ -115,10 +115,16 @@ const isResourceOwner = (model) => {
   };
 };
 
+const isSupplier = (req, res, next) => {
+  if (req.user && req.user.role === 'supplier') return next();
+  return res.status(403).json({ success: false, message: 'Supplier access only' });
+};
+
 module.exports = {
   protect,
   authorize,
   isAdmin,
   isSupplierOrAdmin,
-  isResourceOwner
+  isResourceOwner,
+  isSupplier
 };
