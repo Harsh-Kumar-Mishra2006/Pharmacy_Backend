@@ -11,7 +11,8 @@ const {
   updateUserRole,
   toggleUserStatus,
   deleteUser,
-  searchUsers
+  searchUsers,
+  getAvailableSuppliers 
 } = require('../controllers/authController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
@@ -32,4 +33,5 @@ router.put('/users/:id/role', protect, authorize('admin'), updateUserRole);
 router.put('/users/:id/toggle-status', protect, authorize('admin'), toggleUserStatus);
 router.delete('/users/:id', protect, authorize('admin'), deleteUser);
 
+router.get('/suppliers', protect, isAdmin, getAvailableSuppliers);
 module.exports = router;

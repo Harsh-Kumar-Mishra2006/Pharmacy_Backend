@@ -4,6 +4,7 @@ const Medicine = require('./medicine')(sequelize);
 const Supply = require('./supply')(sequelize);
 const Purchase = require('./Purchase')(sequelize);
 const Payment = require('./Payment')(sequelize);
+const Enquiry = require('./Enquiry')(sequelize);
 
 // --- User <-> Medicine (admin creates catalog) ---
 User.hasMany(Medicine, { foreignKey: 'created_by', as: 'created_medicines' });
@@ -41,11 +42,26 @@ Payment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 User.hasMany(Purchase, { foreignKey: 'payment_verified_by', as: 'verified_purchases' });
 Purchase.belongsTo(User, { foreignKey: 'payment_verified_by', as: 'verifier' });
 
+// --- Enquiry associations ---
+Enquiry.belongsTo(Medicine, { foreignKey: 'medicine_id', as: 'medicine' });
+Medicine.hasMany(Enquiry, { foreignKey: 'medicine_id', as: 'enquiries' });
+
+Enquiry.belongsTo(User, { foreignKey: 'supplier_id', as: 'supplier' });
+User.hasMany(Enquiry, { foreignKey: 'supplier_id', as: 'enquiries' });
+
+Enquiry.belongsTo(User, { foreignKey: 'requested_by', as: 'requester' });
+Enquiry.belongsTo(User, { foreignKey: 'cancelled_by', as: 'canceller' });
+
+Enquiry.belongsTo(Supply, { foreignKey: 'supply_id', as: 'supply' });
+Supply.hasOne(Enquiry, { foreignKey: 'supply_id', as: 'enquiry' });
+
+
 const db = {
   sequelize,
   User,
   Medicine,
   Supply,
+  Enquiry,
   Purchase,
   Payment
 };

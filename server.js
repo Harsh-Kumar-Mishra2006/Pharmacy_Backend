@@ -6,6 +6,7 @@ const authRoutes = require('./routes/authRoutes');
 const medicineRoutes = require('./routes/medicineRoutes');
 const purchaseRoutes = require('./routes/purchaseRoutes'); 
 const supplyRoutes = require('./routes/supplyRoutes');
+const enquiryRoutes = require('./routes/enquiryRoutes');
 
 dotenv.config();
 
@@ -30,6 +31,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/supplies', supplyRoutes);
+app.use('/api/enquiries', enquiryRoutes);
+
 // Health check
 app.get('/', (req, res) => {
   res.json({

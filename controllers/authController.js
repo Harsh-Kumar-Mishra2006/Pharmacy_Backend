@@ -486,3 +486,29 @@ exports.searchUsers = async (req, res) => {
     });
   }
 };
+
+// @desc    Get available suppliers (Admin only)
+// @route   GET /api/auth/suppliers
+// @access  Private/Admin
+exports.getAvailableSuppliers = async (req, res) => {
+  try {
+    const suppliers = await User.findAll({
+      where: { role: 'supplier', is_active: true },
+      attributes: ['id', 'name', 'email', 'phone', 'address', 'profile_picture'],
+      order: [['name', 'ASC']]
+    });
+
+    res.status(200).json({
+      success: true,
+      count: suppliers.length,
+      data: suppliers
+    });
+  } catch (error) {
+    console.error('Get suppliers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching suppliers',
+      error: error.message
+    });
+  }
+};
