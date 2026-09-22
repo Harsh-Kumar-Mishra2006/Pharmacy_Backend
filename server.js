@@ -57,7 +57,7 @@ const startServer = async () => {
   const dbConnected = await testConnection();
   
   if (dbConnected) {
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log('📦 Database synced');
   }
 
