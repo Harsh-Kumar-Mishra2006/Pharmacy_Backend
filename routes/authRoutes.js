@@ -14,7 +14,7 @@ const {
   searchUsers,
   getAvailableSuppliers 
 } = require('../controllers/authController');
-const { protect, authorize } = require('../middlewares/authMiddleware');
+const { protect, authorize, isAdmin } = require('../middlewares/authMiddleware');
 
 // Public routes
 router.post('/register', register);
