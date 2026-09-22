@@ -12,7 +12,7 @@ const {
   getSupplierSummary,
   getSuppliesBySupplier,
   getSupplyStats
-} = require('../controllers/supplyController');
+} = require('../controllers/supplyControllers');
 const { protect, isAdmin, isSupplier, isSupplierOrAdmin } = require('../middlewares/authMiddleware');
 
 router.use(protect);
