@@ -63,7 +63,7 @@ const db = {
   Supply,
   Enquiry,
   Purchase,
-  Payment
+  Payment,
 };
 
 module.exports = db;

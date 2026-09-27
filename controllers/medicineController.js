@@ -1,6 +1,5 @@
 const { Medicine, User, sequelize } = require('../models');
-const { Op } = require('sequelize');
-
+const { Op, fn, col, literal } = require('sequelize');
 // @desc   Admin creates medicine metadata
 // @route  POST /api/medicines
 // @access Private/Admin
@@ -179,5 +178,103 @@ exports.getMedicineStats = async (req, res) => {
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ success: false, message: 'Error fetching statistics', error: error.message });
+  }
+};
+
+// @desc   Get customer-visible medicines: catalog + approved/received supplies
+// @route  GET /api/medicines/available
+// @access Public
+exports.getAvailableMedicines = async (req, res) => {
+  try {
+    const { category, search, in_stock, limit = 100, page = 1 } = req.query;
+
+    const medicineWhere = {};
+    if (category) medicineWhere.category = category;
+    if (search) {
+      medicineWhere[Op.or] = [
+        { name:        { [Op.iLike]: `%${search}%` } },
+        { generic_name:{ [Op.iLike]: `%${search}%` } },
+        { brand_name:  { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    // Supplies that count toward available stock
+    const supplyWhere = {
+      status: { [Op.in]: ['approved', 'received'] },
+    };
+
+    const parsedLimit  = Math.min(parseInt(limit, 10) || 100, 200);
+    const parsedPage   = Math.max(parseInt(page, 10) || 1, 1);
+    const offset       = (parsedPage - 1) * parsedLimit;
+
+    const { count, rows } = await Medicine.findAndCountAll({
+      where: medicineWhere,
+      include: [
+        {
+          model: Supply,
+          as: 'supplies',
+          where: supplyWhere,
+          required: true,               // INNER JOIN → only medicines with stock
+          attributes: [],
+        },
+      ],
+      attributes: {
+        include: [
+          [fn('COALESCE', fn('SUM', col('supplies.quantity')), 0), 'total_quantity'],
+          [fn('MIN', col('supplies.unit_price')), 'min_price'],
+          [fn('MAX', col('supplies.unit_price')), 'max_price'],
+        ],
+      },
+      group: ['Medicine.id'],
+      order: [['name', 'ASC']],
+      limit: parsedLimit,
+      offset,
+      subQuery: false,                // required when grouping + limit
+    });
+
+    const data = rows.map((m) => {
+      const plain = m.get({ plain: true });
+      const qty = Number(plain.total_quantity) || 0;
+      return {
+        id: plain.id,
+        name: plain.name,
+        generic_name: plain.generic_name,
+        brand_name: plain.brand_name,
+        category: plain.category,
+        images: plain.images || [],
+        medical_details: plain.medical_details || {},
+        other_details: plain.other_details || {},
+        metadata: plain.metadata || {},
+        total_quantity: qty,
+        min_price: plain.min_price != null ? Number(plain.min_price) : null,
+        max_price: plain.max_price != null ? Number(plain.max_price) : null,
+        in_stock: qty > 0,
+      };
+    });
+
+    // Optional in_stock filter (post-query, since it depends on aggregation)
+    const finalData =
+      in_stock === 'true'  ? data.filter((m) => m.in_stock)   :
+      in_stock === 'false' ? data.filter((m) => !m.in_stock)  :
+                             data;
+
+    res.status(200).json({
+      success: true,
+      count: finalData.length,
+      data: finalData,
+      pagination: {
+        total: count.length ?? count,   // count is an array when using group
+        page: parsedPage,
+        pages: Math.ceil((count.length ?? count) / parsedLimit),
+        limit: parsedLimit,
+      },
+    });
+  } catch (error) {
+    console.error('Get available medicines error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching available medicines',
+      error: error.message,
+    });
   }
 };
