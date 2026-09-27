@@ -1,4 +1,4 @@
-const { Medicine, User, sequelize } = require('../models');
+const { Medicine, User,Supply, sequelize } = require('../models');
 const { Op, fn, col, literal } = require('sequelize');
 // @desc   Admin creates medicine metadata
 // @route  POST /api/medicines
