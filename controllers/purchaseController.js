@@ -346,10 +346,17 @@ exports.verifyPayment = async (req, res) => {
 // @desc    Get user purchases
 // @route   GET /api/purchases/my-purchases
 // @access  Private
+// controllers/purchaseController.js
+
 exports.getMyPurchases = async (req, res) => {
   try {
     const purchases = await Purchase.findAll({
-      where: { user_id: req.user.id },
+      where: {
+        [Op.or]: [
+          { user_id: req.user.id },
+          { customer_email: req.user.email },
+        ],
+      },
       include: [
         { model: Medicine, as: 'medicine', attributes: ['id', 'name', 'category'] },
         { model: Payment, as: 'payment' },

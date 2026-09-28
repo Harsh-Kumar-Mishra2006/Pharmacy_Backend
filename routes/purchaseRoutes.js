@@ -11,17 +11,21 @@ const {
   cancelPurchase,
   getPurchaseStats,
 } = require('../controllers/purchaseController');
-const { protect, isAdmin } = require('../middlewares/authMiddleware');
+const {
+  protect,
+  isAdmin,
+  optionalProtect,   // ← add this
+} = require('../middlewares/authMiddleware');
 const { upload } = require('../config/multer');
 
-// Public
-router.post('/', createPurchase);
+// Public — but capture the user if a token is present
+router.post('/', optionalProtect, createPurchase);
 
 // Screenshot upload — multipart/form-data, field name: "screenshot"
 router.post(
   '/:id/upload-screenshot',
-  upload.single('screenshot'),   // ← field name MUST be "screenshot"
-  uploadPaymentScreenshot
+  upload.single('screenshot'),
+  uploadPaymentScreenshot,
 );
 
 // Auth required

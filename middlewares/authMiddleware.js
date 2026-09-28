@@ -120,11 +120,45 @@ const isSupplier = (req, res, next) => {
   return res.status(403).json({ success: false, message: 'Supplier access only' });
 };
 
+// middlewares/authMiddleware.js
+
+/**
+ * Optional authentication:
+ *   - If a valid token is present, sets req.user
+ *   - If no token, or an invalid token, sets req.user = undefined
+ *   - Never rejects the request
+ */
+const optionalProtect = async (req, res, next) => {
+  try {
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) {
+      req.user = undefined;
+      return next();
+    }
+
+    const token = header.split(' ')[1];
+    const jwt = require('jsonwebtoken');
+    const { User } = require('../models');
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findByPk(decoded.id, {
+      attributes: ['id', 'name', 'email', 'role'],
+    });
+
+    req.user = user || undefined;
+    next();
+  } catch (err) {
+    // Invalid/expired token → treat as guest, but don't fail
+    req.user = undefined;
+    next();
+  }
+};
 module.exports = {
   protect,
   authorize,
   isAdmin,
   isSupplierOrAdmin,
   isResourceOwner,
-  isSupplier
+  isSupplier,
+  optionalProtect
 };
