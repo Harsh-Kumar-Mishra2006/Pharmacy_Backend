@@ -363,7 +363,13 @@ exports.getSupplyStats = async (req, res) => {
     const received = await Supply.count({ where: { status: 'received' } });
     const rejected = await Supply.count({ where: { status: 'rejected' } });
 
-    const totalValue = await Supply.sum('total_price', { where: { status: ['approved', 'received'] } });
+    const totalValueRows = await Supply.findAll({
+  attributes: [
+    [sequelize.fn('SUM', sequelize.literal('quantity * unit_price')), 'total_value'],
+  ],
+  where: { status: ['approved', 'received'] },
+});
+const totalValue = Number(totalValueRows[0]?.dataValues?.total_value || 0);
 
     res.status(200).json({
       success: true,

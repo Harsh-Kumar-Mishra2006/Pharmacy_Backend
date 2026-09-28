@@ -258,12 +258,14 @@ exports.getAvailableMedicines = async (req, res) => {
       in_stock === 'false' ? data.filter((m) => !m.in_stock)  :
                              data;
 
+    const totalCount = Array.isArray(count) ? count.length : count;
+                             
     res.status(200).json({
       success: true,
       count: finalData.length,
       data: finalData,
       pagination: {
-        total: count.length ?? count,   // count is an array when using group
+        total: totalCount,   // count is an array when using group
         page: parsedPage,
         pages: Math.ceil((count.length ?? count) / parsedLimit),
         limit: parsedLimit,

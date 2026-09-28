@@ -1,3 +1,4 @@
+// routes/purchaseRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -9,23 +10,25 @@ const {
   getAllPurchases,
   getPendingVerifications,
   cancelPurchase,
-  getPurchaseStats
+  getPurchaseStats,
 } = require('../controllers/purchaseController');
 const { protect, isAdmin } = require('../middlewares/authMiddleware');
 
-// Public routes (No auth required)
+// ==================== PUBLIC ====================
 router.post('/', createPurchase);
 router.post('/:id/upload-screenshot', uploadPaymentScreenshot);
-router.get('/:id', getPurchaseById);
 
-// Protected routes (User)
+// ==================== AUTHENTICATED (any role) ====================
 router.get('/my-purchases', protect, getMyPurchases);
 router.put('/:id/cancel', protect, cancelPurchase);
 
-// Admin only routes
+// ==================== ADMIN ====================
 router.get('/admin/all', protect, isAdmin, getAllPurchases);
 router.get('/admin/pending-verifications', protect, isAdmin, getPendingVerifications);
 router.get('/admin/statistics', protect, isAdmin, getPurchaseStats);
 router.put('/admin/:id/verify-payment', protect, isAdmin, verifyPayment);
+
+// ==================== PUBLIC SINGLE (LAST!) ====================
+router.get('/:id', getPurchaseById);
 
 module.exports = router;
