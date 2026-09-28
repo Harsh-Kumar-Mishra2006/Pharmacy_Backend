@@ -1,49 +1,162 @@
+// controllers/medicineController.js
 const { Medicine, User, Supply, sequelize } = require('../models');
-const { Op, fn, col, literal } = require('sequelize');
-// @desc   Admin creates medicine metadata
+const { Op, fn, col } = require('sequelize');
+const { uploadToCloudinary, deleteFromCloudinary } = require('../config/uploadToCloudinary');
+
+// ------------------------------------------------------------------
+// @desc   Admin creates medicine metadata (with optional image upload)
 // @route  POST /api/medicines
 // @access Private/Admin
+// Accepts: multipart/form-data with up to 5 images (field name: "images")
+//          OR JSON body with images: [url1, url2, ...]
+// ------------------------------------------------------------------
 exports.addMedicine = async (req, res) => {
   try {
     const {
       name, generic_name, brand_name, category,
-      medical_details, other_details, metadata, images
+      medical_details, other_details, metadata,
     } = req.body;
 
     if (!name || !category) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide name and category'
+        message: 'Please provide name and category',
       });
     }
 
+    // ---- Resolve images from files or JSON body ----
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      const uploads = await Promise.all(
+        req.files.map((f) =>
+          uploadToCloudinary(f.buffer, { folder: 'pharmacy/medicines' })
+        )
+      );
+      imageUrls = uploads.map((u) => u.secure_url);
+    } else if (Array.isArray(req.body.images)) {
+      imageUrls = req.body.images.filter(Boolean);
+    } else if (typeof req.body.images === 'string' && req.body.images) {
+      // form-data may send a JSON-stringified array
+      try {
+        const parsed = JSON.parse(req.body.images);
+        if (Array.isArray(parsed)) imageUrls = parsed.filter(Boolean);
+      } catch {
+        imageUrls = [req.body.images];
+      }
+    }
+
+    // JSONB fields may arrive as strings in multipart/form-data — parse safely
+    const parseJson = (v, fallback = {}) => {
+      if (v == null) return fallback;
+      if (typeof v === 'object') return v;
+      try { return JSON.parse(v); } catch { return fallback; }
+    };
+
     const medicine = await Medicine.create({
-      name, generic_name, brand_name, category,
-      medical_details: medical_details || {},
-      other_details: other_details || {},
-      metadata: metadata || {},
-      images: images || [],
-      created_by: req.user.id
+      name,
+      generic_name,
+      brand_name,
+      category,
+      medical_details: parseJson(medical_details),
+      other_details: parseJson(other_details),
+      metadata: parseJson(metadata),
+      images: imageUrls,
+      created_by: req.user.id,
     });
 
     const result = await Medicine.findByPk(medicine.id, {
-      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email'] }]
+      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email'] }],
     });
 
     res.status(201).json({
       success: true,
       message: 'Medicine created successfully',
-      data: result
+      data: result,
     });
   } catch (error) {
     console.error('Add medicine error:', error);
-    res.status(500).json({ success: false, message: 'Error adding medicine', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error adding medicine',
+      error: error.message,
+    });
   }
 };
 
-// @desc   Get all medicines (catalog)
-// @route  GET /api/medicines
-// @access Private
+// ------------------------------------------------------------------
+// @desc   Admin updates medicine metadata (with optional image replace)
+// @route  PUT /api/medicines/:id
+// @access Private/Admin
+// Accepts: multipart/form-data with new images (field: "images")
+//          If "replace_images=true" is sent, old Cloudinary files are deleted
+// ------------------------------------------------------------------
+exports.updateMedicine = async (req, res) => {
+  try {
+    const medicine = await Medicine.findByPk(req.params.id);
+    if (!medicine) {
+      return res.status(404).json({ success: false, message: 'Medicine not found' });
+    }
+
+    const payload = { ...req.body };
+
+    const parseJson = (v, fallback) => {
+      if (v == null) return fallback;
+      if (typeof v === 'object') return v;
+      try { return JSON.parse(v); } catch { return fallback; }
+    };
+
+    if (payload.medical_details) payload.medical_details = parseJson(payload.medical_details, medicine.medical_details);
+    if (payload.other_details) payload.other_details = parseJson(payload.other_details, medicine.other_details);
+    if (payload.metadata) payload.metadata = parseJson(payload.metadata, medicine.metadata);
+
+    // New images uploaded?
+    if (req.files && req.files.length > 0) {
+      const uploads = await Promise.all(
+        req.files.map((f) => uploadToCloudinary(f.buffer, { folder: 'pharmacy/medicines' }))
+      );
+      const newUrls = uploads.map((u) => u.secure_url);
+
+      const replace = String(req.body.replace_images).toLowerCase() === 'true';
+      if (replace) {
+        // Delete old Cloudinary files (best-effort — extracts public_id from URL)
+        const oldIds = (medicine.images || [])
+          .map((url) => {
+            const m = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i);
+            return m ? m[1] : null;
+          })
+          .filter(Boolean);
+        await Promise.all(oldIds.map((id) => deleteFromCloudinary(id)));
+        payload.images = newUrls;
+      } else {
+        payload.images = [...(medicine.images || []), ...newUrls];
+      }
+    }
+
+    await medicine.update(payload);
+
+    const updated = await Medicine.findByPk(medicine.id, {
+      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email'] }],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Medicine updated successfully',
+      data: updated,
+    });
+  } catch (error) {
+    console.error('Update medicine error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating medicine',
+      error: error.message,
+    });
+  }
+};
+
+// ------------------------------------------------------------------
+// Rest of the controller unchanged — but fixing the pagination bug
+// ------------------------------------------------------------------
+
 exports.getMedicines = async (req, res) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
@@ -55,7 +168,7 @@ exports.getMedicines = async (req, res) => {
         { name: { [Op.iLike]: `%${search}%` } },
         { generic_name: { [Op.iLike]: `%${search}%` } },
         { brand_name: { [Op.iLike]: `%${search}%` } },
-        { category: { [Op.iLike]: `%${search}%` } }
+        { category: { [Op.iLike]: `%${search}%` } },
       ];
     }
 
@@ -66,7 +179,7 @@ exports.getMedicines = async (req, res) => {
       include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email'] }],
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
-      offset
+      offset,
     });
 
     res.status(200).json({
@@ -76,8 +189,8 @@ exports.getMedicines = async (req, res) => {
         total: count,
         page: parseInt(page),
         pages: Math.ceil(count / parseInt(limit)),
-        limit: parseInt(limit)
-      }
+        limit: parseInt(limit),
+      },
     });
   } catch (error) {
     console.error('Get medicines error:', error);
@@ -85,21 +198,14 @@ exports.getMedicines = async (req, res) => {
   }
 };
 
-// @desc   Get single medicine
-// @route  GET /api/medicines/:id
-// @access Private
 exports.getMedicineById = async (req, res) => {
   try {
     const medicine = await Medicine.findByPk(req.params.id, {
-      include: [
-        { model: User, as: 'creator', attributes: ['id', 'name', 'email'] }
-      ]
+      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email'] }],
     });
-
     if (!medicine) {
       return res.status(404).json({ success: false, message: 'Medicine not found' });
     }
-
     res.status(200).json({ success: true, data: medicine });
   } catch (error) {
     console.error('Get medicine error:', error);
@@ -107,42 +213,21 @@ exports.getMedicineById = async (req, res) => {
   }
 };
 
-// @desc   Admin updates medicine metadata
-// @route  PUT /api/medicines/:id
-// @access Private/Admin
-exports.updateMedicine = async (req, res) => {
-  try {
-    const medicine = await Medicine.findByPk(req.params.id);
-    if (!medicine) {
-      return res.status(404).json({ success: false, message: 'Medicine not found' });
-    }
-
-    await medicine.update(req.body);
-
-    const updated = await Medicine.findByPk(medicine.id, {
-      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email'] }]
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Medicine updated successfully',
-      data: updated
-    });
-  } catch (error) {
-    console.error('Update medicine error:', error);
-    res.status(500).json({ success: false, message: 'Error updating medicine', error: error.message });
-  }
-};
-
-// @desc   Admin deletes medicine
-// @route  DELETE /api/medicines/:id
-// @access Private/Admin
 exports.deleteMedicine = async (req, res) => {
   try {
     const medicine = await Medicine.findByPk(req.params.id);
     if (!medicine) {
       return res.status(404).json({ success: false, message: 'Medicine not found' });
     }
+
+    // Best-effort Cloudinary cleanup
+    const ids = (medicine.images || [])
+      .map((url) => {
+        const m = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i);
+        return m ? m[1] : null;
+      })
+      .filter(Boolean);
+    await Promise.all(ids.map((id) => deleteFromCloudinary(id)));
 
     await medicine.destroy();
     res.status(200).json({ success: true, message: 'Medicine deleted successfully' });
@@ -152,28 +237,18 @@ exports.deleteMedicine = async (req, res) => {
   }
 };
 
-// @desc   Admin stats for catalog
-// @route  GET /api/medicines/statistics
-// @access Private/Admin
 exports.getMedicineStats = async (req, res) => {
   try {
     const totalMedicines = await Medicine.count();
 
     const categories = await Medicine.findAll({
-      attributes: [
-        'category',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
-      ],
-      group: ['category']
+      attributes: ['category', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['category'],
     });
 
     res.status(200).json({
       success: true,
-      data: {
-        total: totalMedicines,
-        categories,
-        category_count: categories.length
-      }
+      data: { total: totalMedicines, categories, category_count: categories.length },
     });
   } catch (error) {
     console.error('Get stats error:', error);
@@ -181,9 +256,11 @@ exports.getMedicineStats = async (req, res) => {
   }
 };
 
-// @desc   Get customer-visible medicines: catalog + approved/received supplies
+// ------------------------------------------------------------------
+// @desc   Customer-visible medicines (aggregated stock from supplies)
 // @route  GET /api/medicines/available
 // @access Public
+// ------------------------------------------------------------------
 exports.getAvailableMedicines = async (req, res) => {
   try {
     const { category, search, in_stock, limit = 100, page = 1 } = req.query;
@@ -192,20 +269,17 @@ exports.getAvailableMedicines = async (req, res) => {
     if (category) medicineWhere.category = category;
     if (search) {
       medicineWhere[Op.or] = [
-        { name:        { [Op.iLike]: `%${search}%` } },
-        { generic_name:{ [Op.iLike]: `%${search}%` } },
-        { brand_name:  { [Op.iLike]: `%${search}%` } },
+        { name: { [Op.iLike]: `%${search}%` } },
+        { generic_name: { [Op.iLike]: `%${search}%` } },
+        { brand_name: { [Op.iLike]: `%${search}%` } },
       ];
     }
 
-    // Supplies that count toward available stock
-    const supplyWhere = {
-      status: { [Op.in]: ['approved', 'received'] },
-    };
+    const supplyWhere = { status: { [Op.in]: ['approved', 'received'] } };
 
-    const parsedLimit  = Math.min(parseInt(limit, 10) || 100, 200);
-    const parsedPage   = Math.max(parseInt(page, 10) || 1, 1);
-    const offset       = (parsedPage - 1) * parsedLimit;
+    const parsedLimit = Math.min(parseInt(limit, 10) || 100, 200);
+    const parsedPage  = Math.max(parseInt(page, 10) || 1, 1);
+    const offset      = (parsedPage - 1) * parsedLimit;
 
     const { count, rows } = await Medicine.findAndCountAll({
       where: medicineWhere,
@@ -214,7 +288,7 @@ exports.getAvailableMedicines = async (req, res) => {
           model: Supply,
           as: 'supplies',
           where: supplyWhere,
-          required: true,               // INNER JOIN → only medicines with stock
+          required: true,
           attributes: [],
         },
       ],
@@ -229,7 +303,8 @@ exports.getAvailableMedicines = async (req, res) => {
       order: [['name', 'ASC']],
       limit: parsedLimit,
       offset,
-      subQuery: false,                // required when grouping + limit
+      subQuery: false,
+      distinct: true,
     });
 
     const data = rows.map((m) => {
@@ -252,22 +327,22 @@ exports.getAvailableMedicines = async (req, res) => {
       };
     });
 
-    // Optional in_stock filter (post-query, since it depends on aggregation)
     const finalData =
       in_stock === 'true'  ? data.filter((m) => m.in_stock)   :
       in_stock === 'false' ? data.filter((m) => !m.in_stock)  :
                              data;
 
+    // Sequelize returns an ARRAY for count when group is used
     const totalCount = Array.isArray(count) ? count.length : count;
-                             
+
     res.status(200).json({
       success: true,
       count: finalData.length,
       data: finalData,
       pagination: {
-        total: totalCount,   // count is an array when using group
+        total: totalCount,
         page: parsedPage,
-        pages: Math.ceil((count.length ?? count) / parsedLimit),
+        pages: Math.ceil(totalCount / parsedLimit),
         limit: parsedLimit,
       },
     });

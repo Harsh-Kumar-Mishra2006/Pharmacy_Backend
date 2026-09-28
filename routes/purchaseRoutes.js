@@ -1,4 +1,3 @@
-// routes/purchaseRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -13,22 +12,29 @@ const {
   getPurchaseStats,
 } = require('../controllers/purchaseController');
 const { protect, isAdmin } = require('../middlewares/authMiddleware');
+const { upload } = require('../config/multer');
 
-// ==================== PUBLIC ====================
+// Public
 router.post('/', createPurchase);
-router.post('/:id/upload-screenshot', uploadPaymentScreenshot);
 
-// ==================== AUTHENTICATED (any role) ====================
+// Screenshot upload — multipart/form-data, field name: "screenshot"
+router.post(
+  '/:id/upload-screenshot',
+  upload.single('screenshot'),
+  uploadPaymentScreenshot
+);
+
+// Auth required
 router.get('/my-purchases', protect, getMyPurchases);
 router.put('/:id/cancel', protect, cancelPurchase);
 
-// ==================== ADMIN ====================
+// Admin
 router.get('/admin/all', protect, isAdmin, getAllPurchases);
 router.get('/admin/pending-verifications', protect, isAdmin, getPendingVerifications);
 router.get('/admin/statistics', protect, isAdmin, getPurchaseStats);
 router.put('/admin/:id/verify-payment', protect, isAdmin, verifyPayment);
 
-// ==================== PUBLIC SINGLE (LAST!) ====================
+// Public single — MUST be last
 router.get('/:id', getPurchaseById);
 
 module.exports = router;

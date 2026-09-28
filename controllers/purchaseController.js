@@ -1,6 +1,7 @@
 // controllers/purchaseController.js
 const { Purchase, Medicine, Payment, User, Supply, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { uploadToCloudinary } = require('../config/uploadToCloudinary');
 
 // ------------------------------------------------------------------
 // Helper: get available stock + cheapest price for a medicine
@@ -144,13 +145,36 @@ exports.createPurchase = async (req, res) => {
 // @desc    Upload payment screenshot
 // @route   POST /api/purchases/:id/upload-screenshot
 // @access  Public
+// controllers/purchaseController.js — top of file: add the import
+
+// ------------------------------------------------------------------
+// @desc    Upload payment screenshot (multipart/form-data, field: "screenshot")
+// @route   POST /api/purchases/:id/upload-screenshot
+// @access  Public
+// ------------------------------------------------------------------
 exports.uploadPaymentScreenshot = async (req, res) => {
   try {
     const { id } = req.params;
-    const { screenshot_url, transaction_id } = req.body;
+    const { transaction_id } = req.body;
 
-    if (!screenshot_url) {
-      return res.status(400).json({ success: false, message: 'Please provide screenshot URL' });
+    // Screenshot can arrive as:
+    //   1. Multipart file  → req.file.buffer
+    //   2. Base64 data URL → req.body.screenshot_url
+    //   3. Remote URL      → req.body.screenshot_url
+    let screenshotUrl = req.body.screenshot_url;
+
+    if (req.file) {
+      const uploaded = await uploadToCloudinary(req.file.buffer, {
+        folder: 'pharmacy/payments',
+      });
+      screenshotUrl = uploaded.secure_url;
+    }
+
+    if (!screenshotUrl) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a screenshot (file field "screenshot" or body field "screenshot_url")',
+      });
     }
 
     const purchase = await Purchase.findByPk(id, {
@@ -160,13 +184,12 @@ exports.uploadPaymentScreenshot = async (req, res) => {
     if (!purchase) {
       return res.status(404).json({ success: false, message: 'Purchase not found' });
     }
-
     if (purchase.payment_status === 'verified') {
       return res.status(400).json({ success: false, message: 'Payment already verified' });
     }
 
     await purchase.payment.update({
-      screenshot_url,
+      screenshot_url: screenshotUrl,
       screenshot_uploaded_at: new Date(),
       status: 'paid',
       transaction_id: transaction_id || null,

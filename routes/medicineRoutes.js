@@ -3,28 +3,29 @@ const router = express.Router();
 const {
   addMedicine,
   getMedicines,
-  getAvailableMedicines,   
+  getAvailableMedicines,
   getMedicineById,
   updateMedicine,
   deleteMedicine,
   getMedicineStats,
 } = require('../controllers/medicineController');
 const { protect, isAdmin } = require('../middlewares/authMiddleware');
+const { upload } = require('../config/multer');
 
-// -------- PUBLIC: customers must see available stock --------
-router.get('/available', getAvailableMedicines);   // <-- MUST be before /:id
+// Public
+router.get('/available', getAvailableMedicines);
 
-// Everything below requires auth
+// Auth required
 router.use(protect);
 
-// Admin only
-router.post('/',           isAdmin, addMedicine);
-router.put('/:id',         isAdmin, updateMedicine);
-router.delete('/:id',      isAdmin, deleteMedicine);
-router.get('/statistics',  isAdmin, getMedicineStats);
+// Admin — accepts multipart/form-data with up to 5 images under field "images"
+router.post('/',      isAdmin, upload.array('images', 5), addMedicine);
+router.put('/:id',    isAdmin, upload.array('images', 5), updateMedicine);
+router.delete('/:id', isAdmin, deleteMedicine);
+router.get('/statistics', isAdmin, getMedicineStats);
 
 // Any authenticated user
-router.get('/',     getMedicines);
-router.get('/:id',  getMedicineById);   // <-- this must come AFTER /available
+router.get('/',    getMedicines);
+router.get('/:id', getMedicineById);
 
 module.exports = router;
