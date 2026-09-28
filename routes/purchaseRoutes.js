@@ -20,7 +20,7 @@ router.post('/', createPurchase);
 // Screenshot upload — multipart/form-data, field name: "screenshot"
 router.post(
   '/:id/upload-screenshot',
-  upload.single('screenshot'),
+  upload.single('screenshot'),   // ← field name MUST be "screenshot"
   uploadPaymentScreenshot
 );
 

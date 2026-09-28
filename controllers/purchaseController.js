@@ -142,38 +142,56 @@ exports.createPurchase = async (req, res) => {
   }
 };
 
-// @desc    Upload payment screenshot
-// @route   POST /api/purchases/:id/upload-screenshot
-// @access  Public
-// controllers/purchaseController.js — top of file: add the import
+// controllers/purchaseController.js
 
-// ------------------------------------------------------------------
-// @desc    Upload payment screenshot (multipart/form-data, field: "screenshot")
-// @route   POST /api/purchases/:id/upload-screenshot
-// @access  Public
-// ------------------------------------------------------------------
 exports.uploadPaymentScreenshot = async (req, res) => {
   try {
     const { id } = req.params;
-    const { transaction_id } = req.body;
+    const { transaction_id } = req.body || {};
 
-    // Screenshot can arrive as:
-    //   1. Multipart file  → req.file.buffer
-    //   2. Base64 data URL → req.body.screenshot_url
-    //   3. Remote URL      → req.body.screenshot_url
-    let screenshotUrl = req.body.screenshot_url;
+    // 🔍 DEBUG — remove once uploads are working
+    console.log('🔍 [upload-screenshot] incoming request', {
+      purchaseId: id,
+      method: req.method,
+      contentType: req.headers['content-type'],
+      hasFile: !!req.file,
+      fileInfo: req.file
+        ? {
+            fieldname: req.file.fieldname,
+            originalname: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+          }
+        : null,
+      bodyKeys: Object.keys(req.body || {}),
+      bodyScreenshotUrl: req.body?.screenshot_url
+        ? String(req.body.screenshot_url).slice(0, 60) + '…'
+        : null,
+      transactionId: transaction_id || null,
+    });
+
+    let screenshotUrl = req.body?.screenshot_url;
 
     if (req.file) {
+      console.log('🔍 [upload-screenshot] uploading buffer to Cloudinary…');
       const uploaded = await uploadToCloudinary(req.file.buffer, {
         folder: 'pharmacy/payments',
       });
       screenshotUrl = uploaded.secure_url;
+      console.log('🔍 [upload-screenshot] Cloudinary upload OK:', screenshotUrl);
     }
 
     if (!screenshotUrl) {
+      console.log('❌ [upload-screenshot] neither file nor screenshot_url present');
       return res.status(400).json({
         success: false,
         message: 'Please provide a screenshot (file field "screenshot" or body field "screenshot_url")',
+        // 🔍 DEBUG payload — remove in production
+        debug: {
+          contentType: req.headers['content-type'],
+          hasFile: !!req.file,
+          bodyKeys: Object.keys(req.body || {}),
+        },
       });
     }
 
@@ -211,7 +229,7 @@ exports.uploadPaymentScreenshot = async (req, res) => {
       data: updatedPurchase,
     });
   } catch (error) {
-    console.error('Upload screenshot error:', error);
+    console.error('❌ Upload screenshot error:', error);
     res.status(500).json({
       success: false,
       message: 'Error uploading screenshot',
