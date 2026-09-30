@@ -512,3 +512,132 @@ exports.getAvailableSuppliers = async (req, res) => {
     });
   }
 };
+
+// ------------------------------------------------------------------
+// @desc    Admin creates a supplier (with login credentials)
+// @route   POST /api/auth/suppliers
+// @access  Private/Admin
+// ------------------------------------------------------------------
+exports.adminCreateSupplier = async (req, res) => {
+  const { User, Supplier, sequelize } = require('../models');
+  const t = await sequelize.transaction();
+
+  try {
+    const {
+      // User / login credentials
+      name,
+      email,
+      password,
+      phone,
+
+      // Supplier business details
+      company_name,
+      contact_person,
+      gst_number,
+      license_number,
+      address,
+      city,
+      state,
+      pincode,
+      country,
+      website,
+      notes,
+    } = req.body;
+
+    // ---------- Validate ----------
+    if (!name || !email || !password) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide name, email and password',
+      });
+    }
+
+    if (password.length < 6) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters',
+      });
+    }
+
+    if (!company_name) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide company_name',
+      });
+    }
+
+    // ---------- Check email uniqueness ----------
+    const existing = await User.findOne({ where: { email }, transaction: t });
+    if (existing) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'A user with this email already exists',
+      });
+    }
+
+    // ---------- Create User with role = supplier ----------
+    // The User model's beforeCreate hook hashes the password.
+    const user = await User.create(
+      {
+        name,
+        email,
+        password,       // gets hashed by hook
+        role: 'supplier',
+        phone: phone || null,
+        address: address || null,
+        is_active: true,
+      },
+      { transaction: t },
+    );
+
+    // ---------- Create Supplier record ----------
+    const supplier = await Supplier.create(
+      {
+        user_id: user.id,
+        company_name,
+        contact_person: contact_person || name,
+        gst_number: gst_number || null,
+        license_number: license_number || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        pincode: pincode || null,
+        country: country || 'India',
+        website: website || null,
+        notes: notes || null,
+        created_by: req.user.id,
+        is_active: true,
+      },
+      { transaction: t },
+    );
+
+    await t.commit();
+
+    // Re-fetch without password
+    const created = await User.findByPk(user.id, {
+      attributes: { exclude: ['password', 'reset_password_token', 'reset_password_expires'] },
+    });
+
+    res.status(201).json({
+      success: true,
+      message:
+        'Supplier created successfully. The supplier can now log in with the provided credentials.',
+      data: {
+        user: created,
+        supplier,
+      },
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error('Admin create supplier error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating supplier',
+      error: error.message,
+    });
+  }
+};

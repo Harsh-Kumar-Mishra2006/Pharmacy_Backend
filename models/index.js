@@ -5,6 +5,7 @@ const Supply = require('./supply')(sequelize);
 const Purchase = require('./Purchase')(sequelize);
 const Payment = require('./Payment')(sequelize);
 const Enquiry = require('./Enquiry')(sequelize);
+const Supplier = require('./Supplier')(sequelize);
 
 // --- User <-> Medicine (admin creates catalog) ---
 User.hasMany(Medicine, { foreignKey: 'created_by', as: 'created_medicines' });
@@ -56,6 +57,14 @@ Enquiry.belongsTo(Supply, { foreignKey: 'supply_id', as: 'supply' });
 Supply.hasOne(Enquiry, { foreignKey: 'supply_id', as: 'enquiry' });
 
 
+// --- User <-> Supplier (1:1) ---
+User.hasOne(Supplier, { foreignKey: 'user_id', as: 'supplier_profile' });
+Supplier.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// --- Admin who created the supplier ---
+User.hasMany(Supplier, { foreignKey: 'created_by', as: 'created_suppliers' });
+Supplier.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+
 const db = {
   sequelize,
   User,
@@ -64,6 +73,7 @@ const db = {
   Enquiry,
   Purchase,
   Payment,
+  Supplier
 };
 
 module.exports = db;
